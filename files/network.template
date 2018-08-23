@@ -4,17 +4,17 @@ Parameters:
     Type: String
   VpcCidrBlock:
     Type: String
-  PublicSubnetAName:
+  PublicSubnet1Name:
     Type: String
-  PublicSubnetACidrBlock:
+  PublicSubnet1CidrBlock:
     Type: String
-  PublicSubnetAAvailabilityZone:
+  PublicSubnet1AvailabilityZone:
     Type: String
-  PublicSubnetBName:
+  PublicSubnet2Name:
     Type: String
-  PublicSubnetBCidrBlock:
+  PublicSubnet2CidrBlock:
     Type: String
-  PublicSubnetBAvailabilityZone:
+  PublicSubnet2AvailabilityZone:
     Type: String
   InternetGatewayName:
     Type: String
@@ -23,6 +23,10 @@ Parameters:
 Outputs:
   VpcId:
     Value: !Ref Vpc
+  PublicSubnet1Id:
+    Value: !Ref PublicSubnet1
+  PublicSubnet2Id:
+    Value: !Ref PublicSubnet2
 Resources:
   Vpc:
     Type: 'AWS::EC2::VPC'
@@ -31,24 +35,24 @@ Resources:
       Tags:
         - Key: Name
           Value: !Ref VpcName
-  PublicSubnetA:
+  PublicSubnet1:
     Type: 'AWS::EC2::Subnet'
     Properties:
       VpcId: !Ref Vpc
-      CidrBlock: !Ref PublicSubnetACidrBlock
-      AvailabilityZone: !Ref PublicSubnetAAvailabilityZone
+      CidrBlock: !Ref PublicSubnet1CidrBlock
+      AvailabilityZone: !Ref PublicSubnet1AvailabilityZone
       Tags:
         - Key: Name
-          Value: !Ref PublicSubnetAName
-  PublicSubnetB:
+          Value: !Ref PublicSubnet1Name
+  PublicSubnet2:
     Type: 'AWS::EC2::Subnet'
     Properties:
       VpcId: !Ref Vpc
-      CidrBlock: !Ref PublicSubnetBCidrBlock
-      AvailabilityZone: !Ref PublicSubnetBAvailabilityZone
+      CidrBlock: !Ref PublicSubnet2CidrBlock
+      AvailabilityZone: !Ref PublicSubnet2AvailabilityZone
       Tags:
         - Key: Name
-          Value: !Ref PublicSubnetBName
+          Value: !Ref PublicSubnet2Name
   InternetGateway:
     Type: 'AWS::EC2::InternetGateway'
     Properties:
@@ -74,13 +78,13 @@ Resources:
       RouteTableId: !Ref RouteTable
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
-  PublicSubnetARouteTableAssociation:
+  PublicSubnet1RouteTableAssociation:
     Type: 'AWS::EC2::SubnetRouteTableAssociation'
     Properties:
-      SubnetId: !Ref PublicSubnetA
+      SubnetId: !Ref PublicSubnet1
       RouteTableId: !Ref RouteTable
-  PublicSubnetBRouteTableAssociation:
+  PublicSubnet2RouteTableAssociation:
     Type: 'AWS::EC2::SubnetRouteTableAssociation'
     Properties:
-      SubnetId: !Ref PublicSubnetB
+      SubnetId: !Ref PublicSubnet2
       RouteTableId: !Ref RouteTable
