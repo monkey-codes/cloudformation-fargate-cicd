@@ -13,6 +13,8 @@
       template_parameters:
         VpcName: 'Example'
         VpcCidrBlock: '10.0.0.0/16'
-        PublicSubnetAName: 'Example - Public A'
+        PublicSubnetAName: 'Example - Public Subnet A'
         PublicSubnetACidrBlock: '10.0.0.0/24'
         PublicSubnetAAvailabilityZone: 'ap-southeast-2a'
+        InternetGatewayName: 'Example - Internet Gateway'
+        RouteTableName: 'Example - Route Table'
