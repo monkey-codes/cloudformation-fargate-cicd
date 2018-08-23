@@ -24,15 +24,15 @@ Outputs:
   VpcId:
     Value: !Ref Vpc
     Export:
-      Name: !Sub '${AWS::StackName}-VpcId'
+      Name: !Sub '${AWS::StackName}:VpcId'
   PublicSubnet1Id:
     Value: !Ref PublicSubnet1
     Export:
-      Name: !Sub '${AWS::StackName}-PublicSubnet1Id'
+      Name: !Sub '${AWS::StackName}:PublicSubnet1Id'
   PublicSubnet2Id:
     Value: !Ref PublicSubnet2
     Export:
-      Name: !Sub '${AWS::StackName}-PublicSubnet2Id'
+      Name: !Sub '${AWS::StackName}:PublicSubnet2Id'
 Resources:
   Vpc:
     Type: 'AWS::EC2::VPC'

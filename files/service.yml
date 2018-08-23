@@ -1,62 +1,43 @@
-AWSTemplateFormatVersion: 2010-09-09
+# Adapted from https://github.com/awslabs/aws-cloudformation-templates/blob/master/aws/services/ECS/FargateLaunchType/services/public-service.yml
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Deploy a service on AWS Fargate, hosted in a public subnet, and accessible via a public load balancer.
 Parameters:
   NetworkStackName:
     Type: String
   ClusterStackName:
     Type: String
-  EcsSecurityGroupName:
-    Type: String
-  AlbSecurityGroupName:
-    Type: String
-  AlbName:
-    Type: String
   ServiceName:
-    Type: String
-  ContainerCpu:
-    Type: String
-  ContainerMemory:
     Type: String
   ImageUrl:
     Type: String
+  ContainerPort:
+    Type: Number
+    Default: 80
+  ContainerCpu:
+    Type: Number
+    Default: 256
+  ContainerMemory:
+    Type: Number
+    Default: 512
+  Path:
+    Type: String
+    Default: "*"
+  Priority:
+    Type: Number
+    Default: 1
   DesiredCount:
     Type: Number
-  TargetGroupName:
+    Default: 2
+  Role:
     Type: String
+    Default: ""
+    Description: (Optional) An IAM role to give the service's containers if the code within needs to
+                 access other AWS resources like S3 buckets, DynamoDB tables, etc
+
+Conditions:
+  HasCustomRole: !Not [ !Equals [!Ref 'Role', ''] ]
+
 Resources:
-  EcsSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Access to the Fargate containers
-      VpcId: {'Fn::ImportValue': !Sub '${NetworkStackName}-VpcId'}
-      SecurityGroupIngress:
-        - SourceSecurityGroupId: !Ref AlbSecurityGroup
-          IpProtocol: -1
-      Tags:
-        - Key: Name
-          Value: !Ref EcsSecurityGroupName
-  AlbSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Access to the public facing load balancer
-      VpcId: {'Fn::ImportValue': !Sub '${NetworkStackName}-VpcId'}
-      SecurityGroupIngress:
-          - CidrIp: 0.0.0.0/0
-            IpProtocol: -1
-      Tags:
-        - Key: Name
-          Value: !Ref AlbSecurityGroupName
-  Alb:
-    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
-    Properties:
-      Scheme: internet-facing
-      SecurityGroups:
-        - !Ref AlbSecurityGroup
-      Subnets:
-        - {'Fn::ImportValue': !Sub '${NetworkStackName}-PublicSubnet1Id'}
-        - {'Fn::ImportValue': !Sub '${NetworkStackName}-PublicSubnet2Id'}
-      Tags:
-        - Key: Name
-          Value: !Ref AlbName
 
   # The task definition. This is a simple metadata description of what
   # container to run, and what resource requirements it has.
@@ -67,46 +48,31 @@ Resources:
       Cpu: !Ref 'ContainerCpu'
       Memory: !Ref 'ContainerMemory'
       NetworkMode: awsvpc
-      RequiresCompatibilities: [FARGATE]
-      ExecutionRoleArn: {'Fn::ImportValue': !Sub '${ClusterStackName}-EcsTaskExecutionRoleName'}
-      TaskRoleArn: 'AWS::NoValue'
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: {'Fn::ImportValue': !Sub '${ClusterStackName}:ECSTaskExecutionRole'}
+      TaskRoleArn:
+        Fn::If:
+          - 'HasCustomRole'
+          - !Ref 'Role'
+          - !Ref "AWS::NoValue"
       ContainerDefinitions:
         - Name: !Ref 'ServiceName'
           Cpu: !Ref 'ContainerCpu'
           Memory: !Ref 'ContainerMemory'
           Image: !Ref 'ImageUrl'
           PortMappings:
-            - ContainerPort: 80
-
-  TargetGroup:
-    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
-    Properties:
-      VpcId: {'Fn::ImportValue': !Sub '${NetworkStackName}-VpcId'}
-      Protocol: HTTP
-      Port: 80
-      Name: !Ref TargetGroupName
-
-  Listener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    DependsOn:
-      - Alb
-    Properties:
-      LoadBalancerArn: !Ref 'Alb'
-      Protocol: HTTP
-      Port: 80
-      DefaultActions:
-        - Type: 'forward'
-          TargetGroupArn: !Ref 'TargetGroup'
+            - ContainerPort: !Ref 'ContainerPort'
 
   # The service. The service is a resource which allows you to run multiple
   # copies of a type of task, and gather up their logs and metrics, as well
   # as monitor the number of running tasks and replace any that have crashed
   Service:
     Type: AWS::ECS::Service
-    DependsOn: ListenerRule
+    DependsOn: LoadBalancerRule
     Properties:
       ServiceName: !Ref 'ServiceName'
-      Cluster: {'Fn::ImportValue': !Sub '${ClusterStackName}-ClusterName'}
+      Cluster: {'Fn::ImportValue': !Sub '${ClusterStackName}:ClusterName'}
       LaunchType: FARGATE
       DeploymentConfiguration:
         MaximumPercent: 200
@@ -116,12 +82,47 @@ Resources:
         AwsvpcConfiguration:
           AssignPublicIp: ENABLED
           SecurityGroups:
-            - !Ref EcsSecurityGroup
+            - {'Fn::ImportValue': !Sub '${ClusterStackName}:FargateContainerSecurityGroup'}
           Subnets:
-            - {'Fn::ImportValue': !Sub '${NetworkStackName}-PublicSubnet1Id'}
-            - {'Fn::ImportValue': !Sub '${NetworkStackName}-PublicSubnet2Id'}
+            - {'Fn::ImportValue': !Sub '${NetworkStackName}:PublicSubnet1Id'}
+            - {'Fn::ImportValue': !Sub '${NetworkStackName}:PublicSubnet2Id'}
       TaskDefinition: !Ref 'TaskDefinition'
       LoadBalancers:
         - ContainerName: !Ref 'ServiceName'
-          ContainerPort: 80
+          ContainerPort: !Ref 'ContainerPort'
           TargetGroupArn: !Ref 'TargetGroup'
+
+  # A target group. This is used for keeping track of all the tasks, and
+  # what IP addresses / port numbers they have. You can query it yourself,
+  # to use the addresses yourself, but most often this target group is just
+  # connected to an application load balancer, or network load balancer, so
+  # it can automatically distribute traffic across all the targets.
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 6
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      TargetType: ip
+      Name: !Ref 'ServiceName'
+      Port: !Ref 'ContainerPort'
+      Protocol: HTTP
+      UnhealthyThresholdCount: 2
+      VpcId: {'Fn::ImportValue': !Sub '${NetworkStackName}:VpcId'}
+
+  # Create a rule on the load balancer for routing traffic to the target group
+  LoadBalancerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - TargetGroupArn: !Ref 'TargetGroup'
+          Type: 'forward'
+      Conditions:
+        - Field: path-pattern
+          Values: [!Ref 'Path']
+      ListenerArn:
+        Fn::ImportValue:
+          !Join [':', [!Ref 'ClusterStackName', 'PublicListener']]
+      Priority: !Ref 'Priority'
