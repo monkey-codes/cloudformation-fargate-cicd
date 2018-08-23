@@ -4,6 +4,12 @@ Parameters:
     Type: String
   VpcCidrBlock:
     Type: String
+  PublicSubnetAName:
+    Type: String
+  PublicSubnetACidrBlock:
+    Type: String
+  PublicSubnetAAvailabilityZone:
+    Type: String
 Outputs:
   VpcId:
     Value: !Ref Vpc
@@ -15,3 +21,13 @@ Resources:
       Tags:
         - Key: Name
           Value: !Ref VpcName
+  PublicSubnetA:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref PublicSubnetACidrBlock
+      AvailabilityZone: !Ref PublicSubnetAAvailabilityZone
+      Tags:
+        - Key: Name
+          Value: !Ref PublicSubnetAName
+
