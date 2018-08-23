@@ -1,0 +1,17 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  VpcName:
+    Type: String
+  VpcCidrBlock:
+    Type: String
+Outputs:
+  VpcId:
+    Value: !Ref Vpc
+Resources:
+  Vpc:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !Ref VpcCidrBlock
+      Tags:
+        - Key: Name
+          Value: !Ref VpcName
