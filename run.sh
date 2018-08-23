@@ -1,3 +1,3 @@
 #!/bin/bash
 
-ansible-playbook -v -i hosts playbook.yaml
+ansible-playbook -v -i hosts playbook.yml

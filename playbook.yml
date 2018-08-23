@@ -9,7 +9,7 @@
       state: 'present'
       region: 'ap-southeast-2'
       disable_rollback: true
-      template: 'files/network.template'
+      template: 'files/network.yml'
       template_parameters:
         VpcName: 'Example'
         VpcCidrBlock: '10.0.0.0/16'
