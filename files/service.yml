@@ -2,9 +2,126 @@ AWSTemplateFormatVersion: 2010-09-09
 Parameters:
   NetworkStackName:
     Type: String
+  ClusterStackName:
+    Type: String
+  EcsSecurityGroupName:
+    Type: String
+  AlbSecurityGroupName:
+    Type: String
+  AlbName:
+    Type: String
+  ServiceName:
+    Type: String
+  ContainerCpu:
+    Type: String
+  ContainerMemory:
+    Type: String
+  ImageUrl:
+    Type: String
+  DesiredCount:
+    Type: Number
+  TargetGroupName:
+    Type: String
 Resources:
-  FargateContainerSecurityGroup:
+  EcsSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Access to the Fargate containers
       VpcId: {'Fn::ImportValue': !Sub '${NetworkStackName}-VpcId'}
+      SecurityGroupIngress:
+        - SourceSecurityGroupId: !Ref AlbSecurityGroup
+          IpProtocol: -1
+      Tags:
+        - Key: Name
+          Value: !Ref EcsSecurityGroupName
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access to the public facing load balancer
+      VpcId: {'Fn::ImportValue': !Sub '${NetworkStackName}-VpcId'}
+      SecurityGroupIngress:
+          - CidrIp: 0.0.0.0/0
+            IpProtocol: -1
+      Tags:
+        - Key: Name
+          Value: !Ref AlbSecurityGroupName
+  Alb:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref AlbSecurityGroup
+      Subnets:
+        - {'Fn::ImportValue': !Sub '${NetworkStackName}-PublicSubnet1Id'}
+        - {'Fn::ImportValue': !Sub '${NetworkStackName}-PublicSubnet2Id'}
+      Tags:
+        - Key: Name
+          Value: !Ref AlbName
+
+  # The task definition. This is a simple metadata description of what
+  # container to run, and what resource requirements it has.
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Ref 'ServiceName'
+      Cpu: !Ref 'ContainerCpu'
+      Memory: !Ref 'ContainerMemory'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: {'Fn::ImportValue': !Sub '${ClusterStackName}-EcsTaskExecutionRoleName'}
+      TaskRoleArn: 'AWS::NoValue'
+      ContainerDefinitions:
+        - Name: !Ref 'ServiceName'
+          Cpu: !Ref 'ContainerCpu'
+          Memory: !Ref 'ContainerMemory'
+          Image: !Ref 'ImageUrl'
+          PortMappings:
+            - ContainerPort: 80
+
+  TargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      VpcId: {'Fn::ImportValue': !Sub '${NetworkStackName}-VpcId'}
+      Protocol: HTTP
+      Port: 80
+      Name: !Ref TargetGroupName
+
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn:
+      - Alb
+    Properties:
+      LoadBalancerArn: !Ref 'Alb'
+      Protocol: HTTP
+      Port: 80
+      DefaultActions:
+        - Type: 'forward'
+          TargetGroupArn: !Ref 'TargetGroup'
+
+  # The service. The service is a resource which allows you to run multiple
+  # copies of a type of task, and gather up their logs and metrics, as well
+  # as monitor the number of running tasks and replace any that have crashed
+  Service:
+    Type: AWS::ECS::Service
+    DependsOn: ListenerRule
+    Properties:
+      ServiceName: !Ref 'ServiceName'
+      Cluster: {'Fn::ImportValue': !Sub '${ClusterStackName}-ClusterName'}
+      LaunchType: FARGATE
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 75
+      DesiredCount: !Ref 'DesiredCount'
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !Ref EcsSecurityGroup
+          Subnets:
+            - {'Fn::ImportValue': !Sub '${NetworkStackName}-PublicSubnet1Id'}
+            - {'Fn::ImportValue': !Sub '${NetworkStackName}-PublicSubnet2Id'}
+      TaskDefinition: !Ref 'TaskDefinition'
+      LoadBalancers:
+        - ContainerName: !Ref 'ServiceName'
+          ContainerPort: 80
+          TargetGroupArn: !Ref 'TargetGroup'

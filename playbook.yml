@@ -39,3 +39,13 @@
       template: 'files/service.yml'
       template_parameters:
         NetworkStackName: 'Network'
+        ClusterStackName: 'EcsCluster'
+        EcsSecurityGroupName: 'ExampleEcs'
+        AlbSecurityGroupName: 'ExampleAlb'
+        AlbName: 'ExampleAlb'
+        ServiceName: 'Example'
+        ContainerCpu: '256'
+        ContainerMemory: '512'
+        ImageUrl: 'nginx'
+        DesiredCount: 2
+        TargetGroupName: 'ExampleTargetGroup'
