@@ -10,6 +10,12 @@ Parameters:
     Type: String
   PublicSubnetAAvailabilityZone:
     Type: String
+  PublicSubnetBName:
+    Type: String
+  PublicSubnetBCidrBlock:
+    Type: String
+  PublicSubnetBAvailabilityZone:
+    Type: String
   InternetGatewayName:
     Type: String
   RouteTableName:
@@ -34,6 +40,15 @@ Resources:
       Tags:
         - Key: Name
           Value: !Ref PublicSubnetAName
+  PublicSubnetB:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref PublicSubnetBCidrBlock
+      AvailabilityZone: !Ref PublicSubnetBAvailabilityZone
+      Tags:
+        - Key: Name
+          Value: !Ref PublicSubnetBName
   InternetGateway:
     Type: 'AWS::EC2::InternetGateway'
     Properties:
@@ -63,4 +78,9 @@ Resources:
     Type: 'AWS::EC2::SubnetRouteTableAssociation'
     Properties:
       SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref RouteTable
+  PublicSubnetBRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnetB
       RouteTableId: !Ref RouteTable

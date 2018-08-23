@@ -16,5 +16,8 @@
         PublicSubnetAName: 'Example - Public Subnet A'
         PublicSubnetACidrBlock: '10.0.0.0/24'
         PublicSubnetAAvailabilityZone: 'ap-southeast-2a'
+        PublicSubnetBName: 'Example - Public Subnet B'
+        PublicSubnetBCidrBlock: '10.0.1.0/24'
+        PublicSubnetBAvailabilityZone: 'ap-southeast-2b'
         InternetGatewayName: 'Example - Internet Gateway'
         RouteTableName: 'Example - Route Table'
