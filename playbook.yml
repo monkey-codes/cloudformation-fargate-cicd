@@ -30,3 +30,12 @@
       template: 'files/cluster.yml'
       template_parameters:
         ClusterName: 'Example'
+  - name: Create or update service stack
+    cloudformation:
+      stack_name: 'Service'
+      state: 'present'
+      region: 'ap-southeast-2'
+      disable_rollback: true
+      template: 'files/service.yml'
+      template_parameters:
+        NetworkStackName: 'Network'

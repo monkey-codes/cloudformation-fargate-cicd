@@ -23,6 +23,8 @@ Parameters:
 Outputs:
   VpcId:
     Value: !Ref Vpc
+    Export:
+      Name: !Sub '${AWS::StackName}-VpcId'
   PublicSubnet1Id:
     Value: !Ref PublicSubnet1
   PublicSubnet2Id:

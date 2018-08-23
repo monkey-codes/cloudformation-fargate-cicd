@@ -1,0 +1,10 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  NetworkStackName:
+    Type: String
+Resources:
+  FargateContainerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access to the Fargate containers
+      VpcId: {'Fn::ImportValue': !Sub '${NetworkStackName}-VpcId'}
