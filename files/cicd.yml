@@ -1,0 +1,369 @@
+# Adapted from https://github.com/awslabs/aws-cloudformation-templates/blob/master/aws/services/ECS/FargateLaunchType/services/public-service.yml
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Setup ci/cd infrastructure (Jenkins, nexus, gitea)
+Parameters:
+  CICDStackName:
+    Type: String
+  NetworkStackName:
+    Type: String
+  AvailabilityZone:
+    Type: String
+  DomainName:
+    Type: String
+  KeyName:
+    Type: String
+    Description: EC2 key pair name
+  SSHFrom:
+    Description: Limit SSH access to cicd hosts to a CIDR IP block
+    Type: String
+    MinLength: 9
+    MaxLength: 18
+    Default: 0.0.0.0/0
+  HTTPFrom:
+    Description: Limit HTTP access to cicd hosts to a CIDR IP block
+    Type: String
+    MinLength: 9
+    MaxLength: 18
+    Default: 0.0.0.0/0
+  LogRetentionInDays:
+    Description: Number of days you would like your CloudWatch Logs to be retained
+    Type: Number
+    Default: 7
+
+# * - EC2 Role
+Resources:
+
+  CICDDataVolume:
+    Type: AWS::EC2::Volume
+    # DeletionPolicy: Snapshot
+    DeletionPolicy: Delete
+    Properties:
+      AvailabilityZone: !Ref AvailabilityZone
+      Size: 24
+      Tags:
+        -
+          Key: Name
+          Value: !Sub "${CICDStackName}-DataVolume"
+      VolumeType: gp2
+
+  CICDHost:
+    Type: AWS::EC2::Instance
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          packages:
+            yum:
+              awslogs: []
+              docker: []
+              git: []
+
+          files:
+            "/etc/cfn/cfn-hup.conf":
+              mode: "000444"
+              owner: root
+              group: root
+              content: !Sub |
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+                interval=1
+                verbose=true
+
+            "/etc/cfn/hooks.d/cfn-auto-reloader.conf":
+              mode: "000444"
+              owner: root
+              group: root
+              content: !Sub |
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.CICDHost.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource CICDHost --region ${AWS::Region}
+                runas=root
+
+            "/etc/awslogs/awslogs.conf":
+              mode: "000444"
+              owner: root
+              group: root
+              content: !Sub |
+                [general]
+                use_gzip_http_content_encoding = true
+                state_file = /var/lib/awslogs/agent-state
+                [/var/log/secure]
+                file = /var/log/secure
+                log_group_name = ${CICDSecureLogGroup}
+                log_stream_name = log
+                datetime_format = %b %d %H:%M:%S
+
+            "/etc/awslogs/awscli.conf":
+              mode: "000444"
+              owner: root
+              group: root
+              content: !Sub |
+                [plugins]
+                cwlogs = cwlogs
+                [default]
+                region = ${AWS::Region}
+
+            "/home/ec2-user/setup-docker.sh":
+              mode: "000550"
+              owner: ec2-user
+              group: ec2-user
+              content: !Sub |
+                #!/bin/bash -xe
+                cd /home/ec2-user
+
+                if [ $(sudo file -s /dev/xvdf | grep ext4 | wc -l) == 0  ]; then
+                    echo "create fs and mount"
+                    sudo mkfs -t ext4 /dev/sdf && sudo mkdir -p /mnt/data && sudo mount /dev/sdf /mnt/data
+                fi
+
+                if [ $(mount | grep "/mnt/data" | wc -l) == 0  ]; then
+                    sudo mkdir -p /mnt/data && sudo mount /dev/sdf /mnt/data
+                fi
+
+                if [ ! -f /usr/local/bin/docker-compose ]; then
+                  sudo yum -y update
+                  sudo yum install -y docker
+                  sudo curl -L https://github.com/docker/compose/releases/download/1.21.0/docker-compose-`uname -s`-`uname -m` | sudo tee /usr/local/bin/docker-compose > /dev/null
+                  sudo chmod +x /usr/local/bin/docker-compose
+                  sudo usermod -a -G docker ec2-user
+                fi
+                if [ ! -f /home/ec2-user/docker-cicd-infrastructure/docker-compose.yml ]; then
+                  git clone https://github.com/monkey-codes/docker-cicd-infrastructure.git
+                  cd docker-cicd-infrastructure
+                  ./generate.sh jenkins.gotomytest.site:jenkins:8080 git.gotomytest.site:git:3000 nexus.gotomytest.site:nexus:8081
+                fi
+                sudo service docker start
+                sudo chkconfig docker on
+
+                sudo mkdir -p /mnt/data/docker/nexus
+                sudo chown ec2-user. -R /mnt/data/docker
+                sudo chown -R 200 /mnt/data/docker/nexus
+                if [ $(sudo docker ps -q | wc -l) == 0  ]; then
+                  sudo ln -sf /mnt/data/docker /home/ec2-user/docker-cicd-infrastructure/data
+                  sudo su - ec2-user -c "docker-compose -f /home/ec2-user/docker-cicd-infrastructure/docker-compose.yml up -d"
+                fi
+
+
+          commands:
+              setup-docker:
+                command: sudo su ec2-user -c /home/ec2-user/setup-docker.sh
+
+          services:
+              sysvinit:
+                cfn-hup:
+                  enabled: true
+                  ensureRunning: true
+                  files:
+                    - /etc/cfn/cfn-hup.conf
+                    - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+                awslogs:
+                  enabled: true
+                  ensureRunning: true
+                  files: /etc/awslogs/awslogs.conf
+
+    Properties:
+      InstanceType: t2.large
+      KeyName: !Ref KeyName
+      NetworkInterfaces:
+        - NetworkInterfaceId: !Ref CICDNetworkInterface
+          DeviceIndex: 0
+      ImageId: !FindInMap [ AMIMap, !Ref "AWS::Region", AMI ]
+      Volumes:
+        -
+          Device: "/dev/sdf"
+          VolumeId: !Ref CICDDataVolume
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          yum update -y
+          /opt/aws/bin/cfn-init -v -s ${AWS::StackId} --resource CICDHost --region ${AWS::Region}
+          # Do stuff
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackId} --resource CICDHost --region ${AWS::Region}
+
+      IamInstanceProfile: !Ref CICDInstanceProfile
+      Tags:
+        - Key: Name
+          Value: pipeline
+    DependsOn: CICDEipAssociation
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT10M
+
+  CICDEip:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  CICDEipAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt CICDEip.AllocationId
+      NetworkInterfaceId: !Ref CICDNetworkInterface
+    DependsOn:
+      - CICDEip
+      - CICDNetworkInterface
+
+  CICDNetworkInterface:
+    Type: AWS::EC2::NetworkInterface
+    Properties:
+      SubnetId: {'Fn::ImportValue': !Sub '${NetworkStackName}:PublicSubnet1Id'}
+      GroupSet:
+        - !Ref CICDSecurityGroup
+      SourceDestCheck: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${CICDStackName}-CICDNetworkInterface"
+
+  CICDSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable access to the cicd host
+      VpcId: {'Fn::ImportValue': !Sub '${NetworkStackName}:VpcId'}
+      SecurityGroupIngress:
+      - CidrIp: !Ref SSHFrom
+        IpProtocol: tcp
+        ToPort: 22
+        FromPort: 22
+      - CidrIp: !Ref HTTPFrom
+        IpProtocol: tcp
+        ToPort: 80
+        FromPort: 80
+      Tags:
+      - Key: Name
+        Value: !Sub "${CICDStackName}-CICDSecurityGroup"
+
+  CICDSecureLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: !Ref LogRetentionInDays
+
+  CICDSecureLogGroupStream:
+    Type: AWS::Logs::LogStream
+    Properties:
+      LogGroupName: !Ref CICDSecureLogGroup
+      LogStreamName: log
+
+  DNS:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      HostedZoneConfig:
+        Comment: "My hosted zone for example.com"
+      Name: !Ref DomainName
+      #      VPCs:
+      #        -
+      #          VPCId: {'Fn::ImportValue': !Sub '${NetworkStackName}:VpcId'}
+      #          VPCRegion: !Ref AWS::Region
+      HostedZoneTags:
+        -
+          Key: Name
+          Value: !Sub "${CICDStackName}-HostedZone"
+
+  JenkinsDNSRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref DNS
+      Comment: DNS name for my instance.
+      Name: !Sub "jenkins.${DomainName}"
+      Type: A
+      TTL: '60'
+      ResourceRecords:
+      - !GetAtt CICDHost.PublicIp
+    DependsOn:
+      - DNS
+
+  GITDNSRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref DNS
+      Comment: DNS name for my instance.
+      Name: !Sub "git.${DomainName}"
+      Type: A
+      TTL: '60'
+      ResourceRecords:
+      - !GetAtt CICDHost.PublicIp
+    DependsOn:
+      - DNS
+
+  NexusDNSRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref DNS
+      Comment: DNS name for my instance.
+      Name: !Sub "nexus.${DomainName}"
+      Type: A
+      TTL: '60'
+      ResourceRecords:
+      - !GetAtt CICDHost.PublicIp
+    DependsOn:
+      - DNS
+
+  CICDHostRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: ec2.amazonaws.com
+          Action: sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AmazonECS_FullAccess"
+        - "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
+      Policies:
+      - PolicyName: CloudWatchLogs
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:DescribeLogStreams
+            - logs:PutLogEvents
+            Resource: !GetAtt CICDSecureLogGroup.Arn
+    DependsOn: CICDSecureLogGroup
+
+  CICDInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref CICDHostRole
+
+Mappings:
+
+  # Amazon Linux AMI - https://aws.amazon.com/amazon-linux-ami/
+  # Note: This has not been tested with Amazon Linux 2
+  AMIMap:
+    ap-northeast-1:
+      AMI: ami-ceafcba8
+    ap-northeast-2:
+      AMI: ami-863090e8
+    ap-south-1:
+      AMI: ami-531a4c3c
+    ap-southeast-1:
+      AMI: ami-68097514
+    ap-southeast-2:
+      AMI: ami-942dd1f6
+    eu-west-1:
+      AMI: ami-d834aba1
+    eu-west-2:
+      AMI: ami-403e2524
+    eu-west-3:
+      AMI: ami-8ee056f3
+    eu-central-1:
+      AMI: ami-5652ce39
+    sa-east-1:
+      AMI: ami-84175ae8
+    us-east-1:
+      AMI: ami-97785bed
+    us-east-2:
+      AMI: ami-f63b1193
+    us-west-1:
+      AMI: ami-824c4ee2
+    us-west-2:
+      AMI: ami-f2d3638a
+    ca-central-1:
+      AMI: ami-a954d1cd
