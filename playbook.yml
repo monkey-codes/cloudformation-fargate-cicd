@@ -42,3 +42,16 @@
         ClusterStackName: 'EcsCluster'
         ServiceName: 'Example'
         ImageUrl: 'nginx'
+  - name: Create or update pipeline stack
+    cloudformation:
+      stack_name: 'CICD'
+      state: 'present'
+      region: 'ap-southeast-2'
+      disable_rollback: true
+      template: 'files/cicd.yml'
+      template_parameters:
+        AvailabilityZone: 'ap-southeast-2a'
+        CICDStackName: 'CICD'
+        NetworkStackName: 'Network'
+        KeyName: 'fargate-test-keys'
+        DomainName: 'gotomytest.site'
