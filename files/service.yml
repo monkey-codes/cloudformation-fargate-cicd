@@ -24,7 +24,7 @@ Parameters:
     Default: "*"
   Priority:
     Type: Number
-    Default: 1
+    Default: 1000
   DesiredCount:
     Type: Number
     Default: 2
