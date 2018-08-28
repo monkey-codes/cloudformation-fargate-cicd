@@ -339,6 +339,56 @@ Resources:
             - logs:DescribeLogStreams
             - logs:PutLogEvents
             Resource: !GetAtt CICDSecureLogGroup.Arn
+
+      - PolicyName: CloudformationDeploy
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+            - cloudformation:CreateUploadBucket
+            - cloudformation:DeleteStackInstances
+            - cloudformation:ListExports
+            - cloudformation:CancelUpdateStack
+            - cloudformation:UpdateStackInstances
+            - cloudformation:ListStackSetOperations
+            - cloudformation:ListStackInstances
+            - cloudformation:UpdateTerminationProtection
+            - cloudformation:DescribeStackResource
+            - cloudformation:UpdateStackSet
+            - cloudformation:CreateChangeSet
+            - cloudformation:CreateStackInstances
+            - cloudformation:DeleteChangeSet
+            - cloudformation:ContinueUpdateRollback
+            - cloudformation:ListStackSetOperationResults
+            - cloudformation:EstimateTemplateCost
+            - cloudformation:DescribeStackEvents
+            - cloudformation:DescribeStackSetOperation
+            - cloudformation:UpdateStack
+            - cloudformation:DescribeAccountLimits
+            - cloudformation:StopStackSetOperation
+            - cloudformation:DescribeChangeSet
+            - cloudformation:CreateStackSet
+            - cloudformation:ExecuteChangeSet
+            - cloudformation:ListStackResources
+            - cloudformation:ListStacks
+            - cloudformation:ListImports
+            - cloudformation:DescribeStackInstance
+            - cloudformation:DescribeStackResources
+            - cloudformation:SignalResource
+            - cloudformation:DeleteStackSet
+            - cloudformation:GetTemplateSummary
+            - cloudformation:DescribeStacks
+            - cloudformation:GetStackPolicy
+            - cloudformation:DescribeStackSet
+            - cloudformation:ListStackSets
+            - cloudformation:CreateStack
+            - cloudformation:GetTemplate
+            - cloudformation:DeleteStack
+            - cloudformation:ValidateTemplate
+            - cloudformation:ListChangeSets
+            Resource: '*'
+
     DependsOn: CICDSecureLogGroup
 
   CICDInstanceProfile:
