@@ -177,6 +177,16 @@ Outputs:
     Value: !Join ['', ['http://', !GetAtt 'PublicLoadBalancer.DNSName']]
     Export:
       Name: !Join [ ':', [ !Ref 'AWS::StackName', 'ExternalUrl' ] ]
+  LBDNSName:
+    Description: The hostname of the external load balancer
+    Value: !GetAtt 'PublicLoadBalancer.DNSName'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'LBDNSName' ] ]
+  LBCanonicalHostedZoneID:
+    Description: The hosted zone id of the external load balancer
+    Value: !GetAtt 'PublicLoadBalancer.CanonicalHostedZoneID'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'LBCanonicalHostedZoneNameID' ] ]
   ECSRole:
     Description: The ARN of the ECS role
     Value: !GetAtt 'ECSRole.Arn'
@@ -188,7 +198,7 @@ Outputs:
     Export:
       Name: !Join [ ':', [ !Ref 'AWS::StackName', 'ECSTaskExecutionRole' ] ]
   PublicListener:
-    Description: The ARN of the public load balancer's Listener
+    Description: The ARN of the public load balancers Listener
     Value: !Ref PublicLoadBalancerListener
     Export:
       Name: !Join [ ':', [ !Ref 'AWS::StackName', 'PublicListener' ] ]
@@ -197,3 +207,4 @@ Outputs:
     Value: !Ref 'FargateContainerSecurityGroup'
     Export:
       Name: !Join [ ':', [ !Ref 'AWS::StackName', 'FargateContainerSecurityGroup' ] ]
+

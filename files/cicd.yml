@@ -387,6 +387,8 @@ Resources:
             - cloudformation:DeleteStack
             - cloudformation:ValidateTemplate
             - cloudformation:ListChangeSets
+            - route53:ListHostedZones
+            - route53:ChangeResourceRecordSets
             Resource: '*'
 
     DependsOn: CICDSecureLogGroup
